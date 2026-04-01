@@ -6,6 +6,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import re
 import json
 
+from backend.nlp.sbert_model import compute_similarity
+
 # Load spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
@@ -58,6 +60,7 @@ class ResumeProcessor:
                 return int(match.group(1))
         return 0
     
+    '''
     def calculate_match_percentage(self, resume_skills, job_skills):
         if not job_skills:
             return 0
@@ -75,6 +78,7 @@ class ResumeProcessor:
             'matched_skills': matched_skills,
             'missing_skills': missing_skills
         }
+    '''
     
     def process_resume(self, file_path, filename):
         # Extract text based on file type
@@ -93,4 +97,45 @@ class ResumeProcessor:
             'text': text,
             'skills': skills,
             'experience_years': experience
+        }
+    
+    def calculate_match_percentage(self, resume_skills, job_skills_or_text, job_keywords=None):
+        """
+        Calculate match percentage using TF-IDF similarity, then adjust with weighted keyword match.
+        - resume_skills: list of skills from resume
+        - job_skills_or_text: list of skills OR raw job description text
+        - job_keywords: optional list of user-provided keywords (uniform weight 1.3)
+        """
+        # Convert skills lists into text strings for similarity
+        resume_text = " ".join(resume_skills) if isinstance(resume_skills, list) else str(resume_skills)
+        job_text = " ".join(job_skills_or_text) if isinstance(job_skills_or_text, list) else str(job_skills_or_text)
+
+        # Step 1: TF-IDF similarity
+        similarity_score = compute_similarity(resume_text, job_text)
+        tfidf_percentage = similarity_score * 100
+
+        # Step 2: Weighted keyword adjustment (if keywords provided)
+        final_percentage = tfidf_percentage
+        matched_keywords = []
+        if job_keywords:
+            weight = 1.3
+            score = 0
+            for kw in job_keywords:
+                if kw.lower() in resume_text.lower():
+                    matched_keywords.append(kw)
+                    score += weight
+            max_score = len(job_keywords) * weight
+            weighted_percentage = (score / max_score) * 100 if max_score > 0 else 0
+
+        # Combine TF-IDF and weighted keyword score (simple average)
+        final_percentage = round((tfidf_percentage + weighted_percentage) / 2, 2)
+
+        # Identify matched and missing skills (basic overlap check)
+        matched_skills = list(set(resume_skills) & set(job_skills_or_text)) if isinstance(job_skills_or_text, list) else []
+        missing_skills = list(set(job_skills_or_text) - set(resume_skills)) if isinstance(job_skills_or_text, list) else []
+
+        return {
+            "match_percentage": round(final_percentage, 2),
+            "matched_skills": matched_skills,
+            "missing_skills": missing_skills,
         }

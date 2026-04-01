@@ -65,6 +65,7 @@ def analyze_resume_job_match(resume_id, job_id):
     # Calculate match
     match_result = processor.calculate_match_percentage(
         resume.skills or [],
+        job.description or "",
         job.required_skills or []
     )
     
